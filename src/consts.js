@@ -5,6 +5,7 @@ const appConstants = {
 	CONFIG_FILE: '../config/defaults.json',
 	HTTP_VERBS: ['get', 'post', 'patch', 'delete', 'put'],
 	DEFAULT_ERROR_CODE_PATH: 'errors[0].extensions.code',
+	NON_NULL_TYPE: 'NonNullType',
 
 	CONFIG_REQUIRED_OPTIONS: ['apiPrefix', 'gqlGeneratorOutputFolder', 'manifestFile', 'filterFieldName'],
 

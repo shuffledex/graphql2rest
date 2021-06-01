@@ -269,7 +269,7 @@ const addRestEndpoint = ({ action, router }) => {
 			debug(`Actual path: ${req.path}`);
 			const statusCode = (action.successStatusCode && Number.isInteger(action.successStatusCode))
 				? action.successStatusCode : consts.SUCCESS_STATUS_CODE;
-			let lastOperation = false;
+			const lastOperation = false;
 			const originalBody = cloneDeep(req.body);
 			const originalQuery = cloneDeep(req.query);
 			const originalParams = cloneDeep(req.params);
@@ -311,7 +311,6 @@ const addRestEndpoint = ({ action, router }) => {
 					if (isExecuteOperation) {
 						await executeOperation({ req, res, queryString, allParams, statusCode, hiddenFields: operation.hide, operationName: operation.operation });
 					}
-
 				} catch (e) {
 					// some unhandled error within forEach loop occurred, error response cannot be sent
 					error('Encountered error in execution chain:');
@@ -329,13 +328,17 @@ const addRestEndpoint = ({ action, router }) => {
 const executeOperation = async ({ req, res, queryString, allParams, statusCode, hiddenFields, operationName }) => {
 	let response;
 	let isErrorResponse = false;
+
+	const query = gql(queryString);
+	const variables = convertTypes(allParams, query);
+
 	debug(`Executing "${queryString.substring(0, 100).replace(/(\r\n|\n|\r)/gm, '')}..." with parameters:`);
-	debug(pretty(allParams));
+	debug(pretty(variables));
 
 	try {
 		response = await funcs.executeFn({
-			query: gql(queryString),
-			variables: allParams,
+			query,
+			variables,
 			context: {
 				headers: req.headers,
 				restRequest: req
@@ -424,5 +427,63 @@ const parseManifestEndpoints = (endpointObj, apipath, router) => {
 	});
 };
 
+
+/* Extracts and returns the name and type of each param */
+const extractNamesAndTypes = query => query.definitions[0].variableDefinitions.map(({
+	variable: {
+		name: {
+			value: name
+		}
+	},
+	type
+}) => {
+	let value;
+
+	const { kind } = type;
+
+	if (kind === consts.NON_NULL_TYPE) {
+		const { type: { name: { value: valueType } } } = type;
+		value = valueType;
+	} else {
+		const { name: { value: valueType } } = type;
+		value = valueType;
+	}
+
+	return {
+		name,
+		type: value,
+		kind
+	};
+});
+
+/* Converts variables to appropriate GraphQL types */
+const convertTypes = (allParams, query) => {
+	const namesAndTypes = extractNamesAndTypes(query);
+
+	let curatedParams = {};
+	namesAndTypes.forEach(({ name, type, kind }) => {
+		if ((kind === consts.NON_NULL_TYPE) || (allParams[name])) {
+			switch (type) {
+				case 'Int':
+					curatedParams = { ...curatedParams, [name]: parseInt(allParams[name], 10) };
+					break;
+				case 'Float':
+					curatedParams = { ...curatedParams, [name]: parseFloat(allParams[name], 10) };
+					break;
+				case 'Boolean':
+					curatedParams = { ...curatedParams, [name]: allParams[name] === 'true' };
+					break;
+				default:
+					curatedParams = { ...curatedParams, [name]: allParams[name] };
+					break;
+			}
+		}
+	});
+	if (allParams.fields) {
+		curatedParams = { ...curatedParams, ...{ fields: allParams.fields } };
+	}
+
+	return curatedParams;
+};
 
 module.exports = { init };
